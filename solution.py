@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import sklearn.preprocessing as preprocessing
 from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
 from sklearn import cross_validation
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import RandomForestClassifier
@@ -113,7 +112,7 @@ def extract_features(data):
     return features
 
 
-def train_model(data):
+def train_model(data, algs):
     """Train model with all data
     Return the classifier trained and the features extracted
     """
@@ -121,42 +120,21 @@ def train_model(data):
     # Extract train features
     features = extract_features(data)
 
-    # Initialize algorithm
-    # alg = LogisticRegression()
-    alg = RandomForestClassifier()
     # Train model
-    alg.fit(features, data['Survived'])
+    for alg in algs:
+        alg.fit(features, data['Survived'])
 
-    return alg, features
+    return algs, features
 
 
-def cross_validation_evaluation(data):
-    """Train system with cross validation of the data,
-    Then evaluate the trained system, I did one classifier and also
-    ensemble classifiers
+def cross_validation_evaluation(data, algs):
+    """Train system with cross validation of the data, with the input algorithms
+    Then evaluate the trained system,
     Return the accuracy
     """
 
     # Extract train features
     features = extract_features(data)
-
-    # Use one of the following classifiers
-    """
-    # LogisticRegression classifier
-    # alg = LogisticRegression()
-    # SVM classifier, with linear kernel
-    # alg = LinearSVC()
-    # Random Forest Classifier
-    alg = RandomForestClassifier()
-
-    scores = cross_validation.cross_val_score(alg, features, data['Survived'])
-    accuracy = scores.mean()
-    """
-    # Ensembling classifiers
-    algs = [
-        LogisticRegression(),
-        LinearSVC(),
-    ]
 
     # Set random_state to ensure to get the same splits every time we run this
     kf = cross_validation.KFold(features.shape[0], n_folds=3,
@@ -168,8 +146,10 @@ def cross_validation_evaluation(data):
         for alg in algs:
             alg.fit(features.iloc[train, :], data['Survived'].iloc[train])
             ensemble_predictions.append(alg.predict(features.iloc[test, :]))
-        test_prediction = (ensemble_predictions[0] +
-                           ensemble_predictions[1]) / len(algs)
+        test_prediction = ensemble_predictions[0]
+        for i in range(1, len(algs)):
+            test_prediction += ensemble_predictions[i]
+        test_prediction = test_prediction / len(algs)
         test_prediction[test_prediction > 0.5] = 1
         test_prediction[test_prediction <= 0.5] = 0
         predictions.append(test_prediction)
@@ -182,16 +162,25 @@ def cross_validation_evaluation(data):
     return accuracy
 
 
-def submission(data, classifier):
+def submission(data, classifiers):
     """Evaluate test data"""
 
     # Extract test features
     features = extract_features(data)
     # Predict test data
-    predictions = classifier.predict(features)
+    predictions = []
+    for classifier in classifiers:
+        prediction = classifier.predict(features)
+        predictions.append(prediction)
 
+    test_prediction = predictions[0]
+    for i in range(1, len(classifiers)):
+        test_prediction += predictions[i]
+    test_prediction = test_prediction / len(classifiers)
+    test_prediction[test_prediction > 0.5] = 1
+    test_prediction[test_prediction <= 0.5] = 0
     submission = pd.DataFrame({'PassengerId': data['PassengerId'],
-                               'Survived': predictions})
+                               'Survived': test_prediction})
     submission.to_csv('Titanic.csv', index=False)
     print('\n\nCongras, you\'v finished the prediction, you can submit it now')
 
@@ -202,8 +191,14 @@ if __name__ == '__main__':
 
     # Load train data
     train_data = pd.read_csv('data/train.csv')
+    # Define ensembling classifiers
+    algs = [
+        LogisticRegression(),
+        LinearSVC(),
+        RandomForestClassifier()
+    ]
     # Use CV to evaluate the accuracy
-    accuracy = cross_validation_evaluation(train_data)
+    accuracy = cross_validation_evaluation(train_data, algs)
     print("accuracy for the training data is:", accuracy)
 
     # Train with all the data
