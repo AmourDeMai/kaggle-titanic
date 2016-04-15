@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import re
 import pandas as pd
 import numpy as np
 import sklearn.preprocessing as preprocessing
@@ -7,6 +8,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import cross_validation
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import LinearSVC
 
 
@@ -53,6 +55,32 @@ def set_cabin_type(data):
     return data
 
 
+def get_title(name):
+    """Get title from a passenger's name"""
+
+    title = re.search(' ([A-Za-z]+)\.', name)
+    if title:
+        return title.group(1)
+    return ''
+
+
+def get_title_feature(data):
+    """Get title feature, this idea is from DATAQUEST"""
+
+    titles = data['Name'].apply(get_title)
+    title_map = {"Mr": 1, "Miss": 2, "Mrs": 3, "Master": 4, "Dr": 5,
+                 "Rev": 6, "Major": 7, "Col": 7, "Mlle": 8, "Mme": 8,
+                 "Don": 9, "Lady": 10, "Countess": 10, "Jonkheer": 10,
+                 "Sir": 9, "Capt": 7, "Ms": 2, "Dona": 8}
+
+    for title, value in title_map.items():
+        titles[titles == title] = value
+
+    data['Title'] = titles
+
+    return titles
+
+
 def scale_data(data, param):
     """Scale the colomns of  param
     Return scaled colomn of data
@@ -83,39 +111,39 @@ def extract_features(data):
     # Or we can fill null data with median of age
     # data['Age'] = data['Age'].fillna(data['Age'].median())
 
+    # If a passenger is a Child
+    data.loc[data['Age'] < 13, 'Child'] = 1
+    data.loc[data['Age'] >= 13, 'Child'] = 0
+
     # Extract dummies of Pclass, Sex, Cabin, Embarked
     pclass = pd.get_dummies(data['Pclass'], prefix='Pclass')
     sex = pd.get_dummies(data['Sex'], prefix='Sex')
-
     cabin = pd.get_dummies(data['Cabin'], prefix='Cabin')
     embarked = pd.get_dummies(data['Embarked'], prefix='Embarked')
+    # Other features
     sibsp = data['SibSp']
     parch = data['Parch']
     data['FamilySize'] = data['SibSp'] + data['Parch']
     family_size = data['FamilySize']
+    title = get_title_feature(data)
 
-    # Scale Age
+    # Scale features
     age = scale_data(data, 'Age')
-    # Scale Fare
     fare = scale_data(data, 'Fare')
-    # Scale Sibsp
     sibsp = scale_data(data, 'SibSp')
-    # Scale Parch
     parch = scale_data(data, 'Parch')
-    # Scale FamilySize
     family_size = scale_data(data, 'FamilySize')
+    title = scale_data(data, 'Title')
 
     # Concate features
     features = pd.concat([pclass, sex, cabin, embarked, age, fare,
-                          sibsp, parch, family_size], axis=1)
+                          family_size, data.Child, title], axis=1)
 
     return features
 
 
 def train_model(data, algs):
-    """Train model with all data
-    Return the classifier trained and the features extracted
-    """
+    """Train model with all data """
 
     # Extract train features
     features = extract_features(data)
@@ -123,8 +151,6 @@ def train_model(data, algs):
     # Train model
     for alg in algs:
         alg.fit(features, data['Survived'])
-
-    return algs, features
 
 
 def cross_validation_evaluation(data, algs):
@@ -184,7 +210,6 @@ def submission(data, classifiers):
     submission.to_csv('Titanic.csv', index=False)
     print('\n\nCongras, you\'v finished the prediction, you can submit it now')
 
-    return submission
 
 # main
 if __name__ == '__main__':
@@ -194,47 +219,17 @@ if __name__ == '__main__':
     # Define ensembling classifiers
     algs = [
         LogisticRegression(),
-        LinearSVC(),
-        RandomForestClassifier()
+        # LinearSVC(),
+        GradientBoostingClassifier()
+        # RandomForestClassifier()
     ]
     # Use CV to evaluate the accuracy
     accuracy = cross_validation_evaluation(train_data, algs)
     print("accuracy for the training data is:", accuracy)
 
-    # Train with all the data
-    # alg, features = train_model(train_data)
-
-    # print(pd.DataFrame({'features': list(features.columns),
-    #                     'coef': list(alg.coef_.T)}))
-
-    # Predict test data, and make a submission
-    # Load test data
-    # test_data = pd.read_csv('data/test.csv')
-    # Save the result in .csv file
-    # submission = submission(test_data, alg)
-
-    # Use ensemble classifiers
     """
-    train_data = pd.read_csv('data/train.csv')
-    features = extract_features(train_data)
-    algs = [
-        LogisticRegression(),
-        LinearSVC(),
-        GaussianNB()
-    ]
-    for alg in algs:
-        alg.fit(features, train_data['Survived'])
-
+    # Train with all the data, then make a prediction and create submit file
+    train_model(train_data, algs)
     test_data = pd.read_csv('data/test.csv')
-    features = extract_features(test_data)
-    predictions = []
-    for alg in algs:
-        predictions.append(alg.predict(features))
-    predictions = (predictions[0] + predictions[1]) / len(algs)
-    predictions[predictions > 0.5] = 1
-    predictions[predictions <= 0.5] = 0
-    submission = pd.DataFrame({'PassengerId': test_data['PassengerId'],
-                               'Survived': predictions})
-    submission.to_csv('Titanic.csv', index=False)
-    print('\n\nCongras, you\'v finished the prediction, you can submit it now')
+    submission(test_data, algs)
     """
