@@ -120,6 +120,11 @@ def extract_features(data):
     sex = pd.get_dummies(data['Sex'], prefix='Sex')
     cabin = pd.get_dummies(data['Cabin'], prefix='Cabin')
     embarked = pd.get_dummies(data['Embarked'], prefix='Embarked')
+    # Age category
+    age_bins = [0, 12, 18, 25, 35, 60, 100]
+    age_groups = ['Child', 'Teenager', 'Youth', 'YoungAdult', 'MiddleAge', 'Senior']
+    data['Age_category'] = pd.cut(data['Age'], age_bins, labels=age_groups)
+    age_category = pd.get_dummies(data['Age_category'], prefix='Age_category')
     # Other features
     sibsp = data['SibSp']
     parch = data['Parch']
@@ -137,7 +142,7 @@ def extract_features(data):
 
     # Concate features
     features = pd.concat([pclass, sex, cabin, embarked, age, fare,
-                          family_size, data.Child, title], axis=1)
+                          family_size, title, age_category], axis=1)
 
     return features
 
@@ -218,7 +223,7 @@ if __name__ == '__main__':
     train_data = pd.read_csv('data/train.csv')
     # Define ensembling classifiers
     algs = [
-        LogisticRegression(),
+        # LogisticRegression(),
         # LinearSVC(),
         GradientBoostingClassifier()
         # RandomForestClassifier()
@@ -226,7 +231,6 @@ if __name__ == '__main__':
     # Use CV to evaluate the accuracy
     accuracy = cross_validation_evaluation(train_data, algs)
     print("accuracy for the training data is:", accuracy)
-
     """
     # Train with all the data, then make a prediction and create submit file
     train_model(train_data, algs)
